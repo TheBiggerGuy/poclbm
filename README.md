@@ -1,5 +1,7 @@
-poclbm
-======
+OpenPyCoiner
+============
+
+A OpenCL client for BitCoin minning
 
 Usage
 -----
@@ -23,5 +25,8 @@ Usage
 	  --list                List all devices
 	  --verbose             Show alot of rubish
 	
-	See (https://github.com/TheBiggerGuy/poclbm/) for more
+	See https://github.com/TheBiggerGuy/poclbm/ for more
 
+Home
+----
+URL: [GitHub](https://github.com/TheBiggerGuy/poclbm/)
