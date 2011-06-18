@@ -1,9 +1,20 @@
+#!/usr/bin/python
+
 import sys
+
+if sys.version_info < (2, 7):
+  print 'Sorry: you must use Python 2.7'
+  sys.exit(1)
+
+try:
+  import pyopencl as cl
+except ImportError:
+  print 'Sorry: you must have pyOpenCL installed'
+  sys.exit(1)
+
 import socket
 import httplib
 import traceback
-
-import pyopencl as cl
 
 from sha256 import *
 from hashlib import md5
@@ -95,20 +106,22 @@ class BitcoinMiner():
   def __init__(
       self,
       device,
-      backup,
-      tolerance,
-      failback,
       host,
       user,
       password,
       port=8332,
+      secure=False,
+      backup=None,
+      tolerance=2,
+      failback=2,
       frames=30,
       rate=1,
       askrate=5,
       worksize=-1,
-      vectors=False,
-      verbose=False,
-      frameSleep=0
+      vectors=True,
+      verbose=True,
+      frameSleep=0.005,
+      userAgentString=USER_AGENT
       ):
     
     self.defines, self.rateDivisor, self.hashspace = if_else(vectors, ('-DVECTORS', 500, 0x7FFFFFFF), ('', 1000, 0xFFFFFFFF))
@@ -123,7 +136,9 @@ class BitcoinMiner():
     self.frames = max(int(frames), 3)
     self.verbose = verbose
     self.frameSleep = frameSleep
-    self.longPollActive = self.stop = False
+    self.longPollActive = False
+    self.stop = False
+    self.isStopped = False
     self.update = True
     self.lock = RLock()
     self.outputLock = RLock()
@@ -141,8 +156,8 @@ class BitcoinMiner():
     self.failback_attempt_count = 0
     self.pool = None
 
-    host = '%s:%s' % (host.replace('http://', ''), port)
-    self.primary = (user, password, host)
+    self.primary = (user, password, host, port)
+    self._secure = secure
     self.setpool(self.primary)
 
     self.postdata = {'method': 'getwork', 'id': 'json'}
@@ -176,7 +191,10 @@ class BitcoinMiner():
 
   def exit(self):
     self.stop = True
-
+  
+  def isStopped(self):
+    return self.isStopped
+  
   def hashrate(self, rate):
     self.say('%s khash/s', rate)
 
@@ -198,8 +216,7 @@ class BitcoinMiner():
     longPollThread.start()
     Thread(target=self.miningThread).start()
 
-    while True:
-      if self.stop: return
+    while not self.stop:
       try:
         with self.lock:
           update = self.update = (self.update or time() - self.lastWork > if_else(self.longPollActive, LONG_POLL_MAX_ASKRATE, self.askrate))
@@ -216,6 +233,7 @@ class BitcoinMiner():
       except Exception:
         self.sayLine("Unexpected error:")
         traceback.print_exc()
+    self.isStopped = True
 
   def queueWork(self, work):
     with self.lock:
@@ -253,7 +271,10 @@ class BitcoinMiner():
           self.sayLine("Attempting to fail back to primary pool")
         self.failback_getwork_count += 1
       if not self.connection:
-        self.connection = httplib.HTTPConnection(self.host, strict=True, timeout=TIMEOUT)
+        if self._secure:
+          self.connection = httplib.HTTPSConnection(self.host, port=self.port, strict=True, timeout=TIMEOUT)
+        else:
+          self.connection = httplib.HTTPConnection(self.host, port=self.port, strict=True, timeout=TIMEOUT)
       self.postdata['params'] = if_else(data, [data], [])
       (self.connection, result) = self.request(self.connection, '/', self.headers, dumps(self.postdata))
       self.errors = 0
@@ -266,7 +287,7 @@ class BitcoinMiner():
       self.failure('Wrong username or password')
     except RPCError as e:
       self.say('%s', e)
-    except (IOError, httplib.HTTPException, ValueError):
+    except (IOError, httplib.HTTPException, ValueError) as e:
       if save_pool:
         self.failback_attempt_count += 1
         self.setpool(save_pool)
@@ -288,8 +309,9 @@ class BitcoinMiner():
 
   def setpool(self, pool):
     self.pool = pool
-    user, pwd, host = pool
+    user, pwd, host, port = pool
     self.host = host
+    self.port = port
     self.sayLine('Setting pool %s @ %s', (user, host))
     self.headers = {"User-Agent": USER_AGENT, "Authorization": 'Basic ' + b64encode('%s:%s' % (user, pwd))}
     self.connection = None
@@ -465,3 +487,7 @@ class BitcoinMiner():
 
     if (self.worksize == -1):
       self.worksize = self.miner.search.get_work_group_info(cl.kernel_work_group_info.WORK_GROUP_SIZE, self.device)
+
+if __name__ == '__main__':
+  print "This is only a module and can not be run as a program"
+
