@@ -24,7 +24,7 @@ class Cpu(object):
     self.sse2 = sse2
   
   def __str__(self):
-    return "CPU '{name}' Object".format(name=self.name)
+    return "CPU '({number) {name}' Object".format(name=self.name, number=self.number)
 
 class Cpus(object):
   
