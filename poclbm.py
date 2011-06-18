@@ -73,11 +73,11 @@ if __name__ == '__main__':
   parser.add_argument(
     '--device',
     action='store',
-    nargs='?',
+    nargs='*',
     default=0,
     type=int,
     help='Device number, see --list for a list of devices',
-    dest='device'
+    dest='devices'
   )
   parser.add_argument(
     '--list',
@@ -100,43 +100,53 @@ if __name__ == '__main__':
     parser.print_usage()
     sys.exit(1)
   
-  # for a list of all devices
-  devices = DeviceList()
+  # search for all devices
+  sysDevices = DeviceList()
   
   # only asked to list devices
   if args.list:
-    devices.showAllDevices()
+    sysDevices.showAllDevices()
     sys.exit(0)
   
   # invalid device number given
-  if args.device < 0 or args.device >= len(devices):
-    print 'Please select a real device (0 to %d)' % (len(devices)-1)
-    devices.showAllDevices()
-    sys.exit(1)
+  for device in args.devices:
+    if device < 0 or device >= len(sysDevices):
+      print 'Please select a real device (0 to %d)' % (len(devices)-1)
+      devices.showAllDevices()
+      sys.exit(1)
   
-  if devices[args.device].getType() != Device.TYPE_OPENCL:
-    print "Sorry only OpenCL devices supported currently"
-    sys.exit(1)
+  # TODO
+  for device in args.devices:
+    if sysDevices[device].getType() != Device.TYPE_OPENCL:
+      print "Sorry only OpenCL devices supported currently"
+      sys.exit(1)
 
-  device = devices[args.device].getOpenCL()
-
-  miner = None
+  miners = []
   try:
-    miner = BitcoinMiner(
-              device,
-              args.host,
-              args.user,
-              args.password,
-              args.port,
-              secure=args.secure,
-              userAgentString=PROGRAM_NAME
-            )
-    miner.mine()
+    # build all the minners
+    for device in args.devices:
+      miner = BitcoinMiner(
+        sysDevices[device].getOpenCL(),
+        args.host,
+        args.user,
+        args.password,
+        args.port,
+        secure=args.secure,
+        userAgentString=PROGRAM_NAME
+      )
+      miners.append(miner)
+    # start all the minners
+    for miner in miners:
+      miner.mine()
   except KeyboardInterrupt:
     print '\nCtrl-C\nexiting ...'
+    sys.exit(0)
   finally:
-    if miner:
-      miner.exit()
-      while miner.isStopped:
-        pass
-  print " ... finished\n"
+    # kill and wait for all the minners to die
+    for miner in miners:
+      if miner != None:
+        miner.exit()
+        while not miner.isStopped:
+          pass
+        print "   a minner died :("
+  print "      ... finished\n"

@@ -103,6 +103,7 @@ class NotAuthorized(Exception): pass
 class RPCError(Exception): pass
 
 class BitcoinMiner():
+  
   def __init__(
       self,
       device,
@@ -137,8 +138,8 @@ class BitcoinMiner():
     self.verbose = verbose
     self.frameSleep = frameSleep
     self.longPollActive = False
-    self.stop = False
-    self.isStopped = False
+    self._run       = False
+    self._isStopped = False
     self.update = True
     self.lock = RLock()
     self.outputLock = RLock()
@@ -190,10 +191,10 @@ class BitcoinMiner():
     self.say(format, args)
 
   def exit(self):
-    self.stop = True
+    self._run = False
   
   def isStopped(self):
-    return self.isStopped
+    return self._isStopped
   
   def hashrate(self, rate):
     self.say('%s khash/s', rate)
@@ -210,13 +211,14 @@ class BitcoinMiner():
     self.sayLine('%s, %s', (hash, if_else(accepted, 'accepted', 'invalid or stale')))
 
   def mine(self):
-    self.stop = False
+    self._run = True
+    self._isStopped = False
     longPollThread = Thread(target=self.longPollThread)
     longPollThread.daemon = True
     longPollThread.start()
-    Thread(target=self.miningThread).start()
-
-    while not self.stop:
+    miningThread = Thread(target=self.miningThread).start()
+    
+    while self._run:
       try:
         with self.lock:
           update = self.update = (self.update or time() - self.lastWork > if_else(self.longPollActive, LONG_POLL_MAX_ASKRATE, self.askrate))
@@ -233,7 +235,11 @@ class BitcoinMiner():
       except Exception:
         self.sayLine("Unexpected error:")
         traceback.print_exc()
-    self.isStopped = True
+    
+    # wait for all the threads to die
+    miningThread.join()
+    longPollThread.join()
+    self._isStopped = True
 
   def queueWork(self, work):
     with self.lock:
@@ -340,12 +346,11 @@ class BitcoinMiner():
       if not result or not response or (response.version == 10 and response.getheader('connection', '') != 'keep-alive') or response.getheader('connection', '') == 'close':
         connection.close()
         connection = None
-
+  
   def longPollThread(self):
     connection = None
     last_url = None
-    while True:
-      if self.stop: return
+    while self._run:
       sleep(1)
       url = self.longPollURL
       if url != '':
@@ -391,10 +396,8 @@ class BitcoinMiner():
     output_buf = cl.Buffer(self.context, cl.mem_flags.WRITE_ONLY | cl.mem_flags.USE_HOST_PTR, hostbuf=output)
 
     work = None
-    while True:
+    while self._run:
       sleep(self.frameSleep)
-      if self.stop:
-        return
       if (not work) or (not self.workQueue.empty()):
         try:
           work = self.workQueue.get(True, 1)
