@@ -15,6 +15,7 @@ except ImportError:
 import socket
 import httplib
 import traceback
+import logging
 
 from sha256 import *
 from hashlib import md5
@@ -121,9 +122,11 @@ class BitcoinMiner():
       worksize=-1,
       vectors=True,
       verbose=True,
-      frameSleep=0.005,
+      frameSleep=0.001,
       userAgentString=USER_AGENT
       ):
+    
+    self.log = logging.getLogger(__name__)
     
     self.defines, self.rateDivisor, self.hashspace = if_else(vectors, ('-DVECTORS', 500, 0x7FFFFFFF), ('', 1000, 0xFFFFFFFF))
     self.defines += (' -DOUTPUT_SIZE=' + str(OUTPUT_SIZE))
@@ -142,7 +145,6 @@ class BitcoinMiner():
     self._isStopped = False
     self.update = True
     self.lock = RLock()
-    self.outputLock = RLock()
     self.lastWork = 0
     self.lastBlock = self.updateTime = self.longPollURL = ''
 
@@ -172,24 +174,9 @@ class BitcoinMiner():
           pwd, host = temp.split('@')
           self.backup.append((user, pwd, host))
         except ValueError:
-          self.sayLine('Ignored invalid backup pool: %s', pool)
+          self.log.error('Ignored invalid backup pool: %s' % pool)
           continue
-
-  def say(self, format, args=()):
-    with self.outputLock:
-      p = format % args
-      if self.verbose:
-        print '%s,' % datetime.now().strftime(TIME_FORMAT), p
-      else:
-        pool = self.pool[2]+' ' if self.pool else ''
-        sys.stdout.write('\r%s\r%s%s' % (" "*len(p), pool, p))
-      sys.stdout.flush()
-
-  def sayLine(self, format, args=()):
-    if not self.verbose:
-      format = '%s, %s\n' % (datetime.now().strftime(TIME_FORMAT), format)
-    self.say(format, args)
-
+  
   def exit(self):
     self._run = False
   
@@ -197,18 +184,18 @@ class BitcoinMiner():
     return self._isStopped
   
   def hashrate(self, rate):
-    self.say('%s khash/s', rate)
+    self.log.info('%s khash/s' % rate)
 
   def failure(self, message):
     print '\n%s' % message
     self.exit()
 
-  def diff1Found(self, hash, target):
-    if self.verbose and target < 0xFFFF0000L:
-      self.sayLine('checking %s <= %s', (hash, target))
+  def diff1Found(self, hash_, target):
+    if target < 0xFFFF0000L:
+      self.log.info('checking %s <= %s' % hash_, target)
 
-  def blockFound(self, hash, accepted):
-    self.sayLine('%s, %s', (hash, if_else(accepted, 'accepted', 'invalid or stale')))
+  def blockFound(self, hash_, accepted):
+    self.log.info('%s, %s' % hash_, if_else(accepted, 'accepted', 'invalid or stale'))
 
   def mine(self):
     self._run = True
@@ -233,7 +220,7 @@ class BitcoinMiner():
             self.sendResult(self.resultQueue.get(False))
         sleep(1)
       except Exception:
-        self.sayLine("Unexpected error:")
+        self.log.error("Unexpected error:")
         traceback.print_exc()
     
     # wait for all the threads to die
@@ -274,7 +261,7 @@ class BitcoinMiner():
           save_pool = self.pool
           self.setpool(self.primary)
           self.connection = None
-          self.sayLine("Attempting to fail back to primary pool")
+          self.log.warn("Attempting to fail back to primary pool")
         self.failback_getwork_count += 1
       if not self.connection:
         if self._secure:
@@ -292,20 +279,20 @@ class BitcoinMiner():
     except NotAuthorized:
       self.failure('Wrong username or password')
     except RPCError as e:
-      self.say('%s', e)
+      self.log.error(str(e))
     except (IOError, httplib.HTTPException, ValueError) as e:
       if save_pool:
         self.failback_attempt_count += 1
         self.setpool(save_pool)
-        self.sayLine('Still unable to reconnect to primary pool (attempt %s), failing over', self.failback_attempt_count)
+        self.log.warn('Still unable to reconnect to primary pool (attempt %s), failing over' % self.failback_attempt_count)
         self.failback_getwork_count = 0
         return
-      self.say('Problems communicating with bitcoin RPC %s %s', (self.errors, self.tolerance))
+      self.warn('Problems communicating with bitcoin RPC %s %s' % self.errors, self.tolerance)
       self.errors += 1
       if self.errors > self.tolerance+1:
         self.errors = 0
         if self.backup_pool_index >= len(self.backup):
-          self.sayLine("No more backup pools left. Using primary and starting over.")
+          self.log.warn("No more backup pools left. Using primary and starting over.")
           pool = self.primary
           self.backup_pool_index = 0
         else:
@@ -318,7 +305,7 @@ class BitcoinMiner():
     user, pwd, host, port = pool
     self.host = host
     self.port = port
-    self.sayLine('Setting pool %s @ %s', (user, host))
+    self.log.info('Setting pool {user} on {host}'.format(user=user, host=host))
     self.headers = {"User-Agent": USER_AGENT, "Authorization": 'Basic ' + b64encode('%s:%s' % (user, pwd))}
     self.connection = None
 
@@ -362,23 +349,23 @@ class BitcoinMiner():
           if url == '': url = '/'
         try:
           if self.longPollURL != last_url:
-            self.sayLine("Using new LP URL %s", url)
+            self.log.info("Using new LP URL %s" % url)
             connection = None
           if not connection:
-            self.sayLine("LP connected to %s", host)
+            self.log.info("LP connected to %s" % host)
             connection = httplib.HTTPConnection(host, timeout=LONG_POLL_TIMEOUT)
           self.longPollActive = True
           (connection, result) = self.request(connection, url, self.headers)
           self.longPollActive = False
           self.queueWork(result['result'])
-          self.sayLine('long poll: new block %s%s', (result['result']['data'][56:64], result['result']['data'][48:56]))
+          self.log.info('long poll: new block %s%s' % result['result']['data'][56:64], result['result']['data'][48:56])
           last_url = self.longPollURL
         except NotAuthorized:
-          self.sayLine('long poll: Wrong username or password')
+          self.log.error('long poll: Wrong username or password')
         except RPCError as e:
-          self.sayLine('long poll: %s', e)
+          self.log.error('long poll: %s', e)
         except (IOError, httplib.HTTPException, ValueError):
-          self.sayLine('long poll exception:')
+          self.log.error('long poll exception:')
           traceback.print_exc()
 
   def miningThread(self):
@@ -456,7 +443,7 @@ class BitcoinMiner():
           self.update = True
           noncesLeft += 0xFFFFFFFFFFFF
         elif 0xFFFFFFFFFFF < noncesLeft < 0xFFFFFFFFFFFF:
-          self.sayLine('warning: job finished, miner is idle')
+          self.log.error('warning: job finished, miner is idle')
           work = None
       elif now - lastNTime > 1:
         data[1] = bytereverse(bytereverse(data[1]) + 1)

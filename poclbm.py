@@ -7,12 +7,13 @@ if sys.version_info < (2, 7):
   sys.exit(1)
 
 try:
-  import pyopencl as cl
+  import pyopencl
+  cl = True
 except ImportError:
-  print 'Sorry: you must have pyOpenCL installed'
-  sys.exit(1)
+  cl = False
 
 import argparse
+import logging
 
 from BitcoinMiner import *
 from DeviceFinder import *
@@ -22,6 +23,17 @@ PROGRAM_NAME    = 'OpenPyCoiner Version %d' % PROGRAM_VERSION
 
 if __name__ == '__main__':
   
+  logging.basicConfig(level=logging.DEBUG, format='%(asctime)s | %(levelname)s | %(name)s | %(message)s')
+  
+  log = logging.getLogger("Main")
+  
+  # first show a list of known warnings
+  if not cl:
+    print 'WARNING: No OpenCL libary found. Please install "pyOpenCL" to enable GPU prossesing'
+  if sys.subversion[0] != 'CPython':
+    print 'WARNING: Not running on "CPython", this is un tested'
+  
+  # set op the argument parser
   parser = argparse.ArgumentParser(
     description='A OpenCL client for BitCoin minning',
     epilog='See https://github.com/TheBiggerGuy/poclbm for more'
@@ -74,7 +86,7 @@ if __name__ == '__main__':
     '--device',
     action='store',
     nargs='*',
-    default=0,
+    default=[0],
     type=int,
     help='Device number, see --list for a list of devices',
     dest='devices'
@@ -111,16 +123,19 @@ if __name__ == '__main__':
   # invalid device number given
   for device in args.devices:
     if device < 0 or device >= len(sysDevices):
-      print 'Please select a real device (0 to %d)' % (len(devices)-1)
-      devices.showAllDevices()
+      print 'Please select a real device (0 to %d)' % (len(sysDevices)-1)
+      sysDevices.showAllDevices()
       sys.exit(1)
   
   # TODO
   for device in args.devices:
     if sysDevices[device].getType() != Device.TYPE_OPENCL:
-      print "Sorry only OpenCL devices supported currently"
+      print 'Sorry only OpenCL devices supported currently'
+      sysDevices.showAllDevices()
       sys.exit(1)
-
+  
+  print "-"*76
+  
   miners = []
   try:
     # build all the minners
@@ -139,7 +154,8 @@ if __name__ == '__main__':
     for miner in miners:
       miner.mine()
   except KeyboardInterrupt:
-    print '\nCtrl-C\nexiting ...'
+    print # try to clean the carret
+    log.warn('Ctrl-C - Exiting ...')
     sys.exit(0)
   finally:
     # kill and wait for all the minners to die
@@ -148,5 +164,8 @@ if __name__ == '__main__':
         miner.exit()
         while not miner.isStopped:
           pass
-        print "   a minner died :("
-  print "      ... finished\n"
+        log.warn('a minner died :(')
+    log.warn('finished')
+    print "-"*76
+    print "The End"
+

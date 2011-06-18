@@ -1,6 +1,8 @@
 #!/usr/bin/python
 
 import sys
+import logging
+import re
 
 if sys.version_info < (2, 7):
   print 'Sorry: you must use Python 2.7'
@@ -9,10 +11,7 @@ if sys.version_info < (2, 7):
 try:
   import pyopencl as cl
 except ImportError:
-  print 'Sorry: you must have pyOpenCL installed'
-  sys.exit(1)
-
-import re
+  cl = None
 
 class Device(object):
   
@@ -65,8 +64,12 @@ class OpenCLDevice(Device):
 class DeviceList(object):
   
   def __init__(self):
+    self.logger = logging.getLogger("DeviceList")
     self._devices = []
-    self._populateOpenCl()
+    if cl:
+      self._populateOpenCl()
+    else:
+      self.logger.warn('No OpenCL libary')
     self._populateCpus()
   
   def __getitem__(self, key):
