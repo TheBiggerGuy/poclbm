@@ -33,9 +33,15 @@ class Cpus(object):
     self._populate()
   
   def _populate(self):
+    try:
+      proc = open("/proc/cpuinfo", "r")
+    except IOError as e:
+      self._cpus.append( Cpu("Unknown (Only assumed)", 0) )
+      return
+    
     sse  = False
     sse2 = False
-    for line in open("/proc/cpuinfo", "r"):
+    for line in proc:
       if line == "\n":
         cpu = Cpu(name, number, sse=sse, sse2=sse2)
         self._cpus.append(cpu)
@@ -65,19 +71,27 @@ class Cpus(object):
   def get_platforms(self):
     return self._cpus
 
-def showAllDevices():
-  i = 0
-  gpus = cl.get_platforms()
-  for gpu in gpus:
-    print '[%d]\tOpenCL\t%s' % (i, gpu.name)
-    i+=1
-  cpus = Cpus().get_platforms()
-  for cpu in cpus:
-    if cpu.sse2:
-      print '[%d]\tSSE2\t%s' % (i, cpu.name)
-    else:
-      print '[%d]\tc\t\t%s' % (i, cpu.name)
-    i+=1
+class DeviceList(object):
+  
+  def __init__(self):
+    self._gpus = cl.get_platforms()
+    self._cpus = Cpus().get_platforms()
+  
+  def getNumber(self):
+    return len(self._gpus) + len(self._cpus)
+
+  def showAllDevices(self):
+    i = 0
+    gpus = cl.get_platforms()
+    for gpu in self._gpus:
+      print '[%d]\tOpenCL\t%s' % (i, gpu.name)
+      i+=1
+    for cpu in self._cpus:
+      if cpu.sse2:
+        print '[%d]\tSSE2\t%s' % (i, cpu.name)
+      else:
+        print '[%d]\tc\t\t%s' % (i, cpu.name)
+      i+=1
 
 if __name__ == '__main__':
   
@@ -163,20 +177,24 @@ if __name__ == '__main__':
   
   args = parser.parse_args()
   
-  if args.list:
-    showAllDevices()
-    sys.exit(0)
-  
   if args.port < 0 or args.port > 0xFFFF:
     print 'Invalid port (0 <= port => 4,294,967,296)'
     parser.print_usage()
     sys.exit(1)
-    
+  
+  devices = DeviceList()
+  
+  if args.list:
+    devices.showAllDevices()
+    sys.exit(0)
+  
+  # more than 1 device and non selected
+  if args.device < 0 or args.device >= devices.getNumber():
+    print 'Please select a real device (0 to %d)' % (devices.getNumber()-1)
+    devices.showAllDevices()
+    sys.exit(1)
   
   sys.exit(0)
-  
-  
-  
   ## TODO ##########################################################
   
   
@@ -185,11 +203,7 @@ if __name__ == '__main__':
     print 'Sorry no openCL devices found'
     sys.exit(1)
   
-  # more than 1 device and non selected
-  elif len(platforms) > 1 and args.platform == -1:
-    print 'Please select a device'
-    showPlatforms()
-    sys.exit(1)
+  
   
   # platform number too low or high
   elif args.platform < -1 or args.platform >= len(platforms):
