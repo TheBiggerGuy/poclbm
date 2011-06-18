@@ -23,15 +23,15 @@ PROGRAM_NAME    = 'OpenPyCoiner Version %d' % PROGRAM_VERSION
 
 if __name__ == '__main__':
   
+  # start the logging framework
   logging.basicConfig(level=logging.DEBUG, format='%(asctime)s | %(levelname)s | %(name)s | %(message)s')
-  
   log = logging.getLogger("Main")
   
   # first show a list of known warnings
   if not cl:
-    print 'WARNING: No OpenCL libary found. Please install "pyOpenCL" to enable GPU prossesing'
+    print 'WARNING: No OpenCL libary found. Please install "pyOpenCL" to enable GPU prossesing\n'
   if sys.subversion[0] != 'CPython':
-    print 'WARNING: Not running on "CPython", this is un tested'
+    print 'WARNING: Not running on "CPython", this is untested\n'
   
   # set op the argument parser
   parser = argparse.ArgumentParser(
@@ -134,8 +134,8 @@ if __name__ == '__main__':
       sysDevices.showAllDevices()
       sys.exit(1)
   
+  # Main loop ##################################################################
   print "-"*76
-  
   miners = []
   try:
     # build all the minners

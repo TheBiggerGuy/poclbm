@@ -14,7 +14,7 @@ except ImportError:
 
 import socket
 import httplib
-import traceback
+#import traceback
 import logging
 
 from sha256 import *
@@ -147,10 +147,10 @@ class BitcoinMiner():
     self.lock = RLock()
     self.lastWork = 0
     self.lastBlock = self.updateTime = self.longPollURL = ''
-
+    
     self.workQueue = Queue()
     self.resultQueue = Queue()
-
+    
     self.backup_pool_index = 0
     self.errors = 0
     self.tolerance = tolerance
@@ -158,14 +158,16 @@ class BitcoinMiner():
     self.failback_getwork_count = 0
     self.failback_attempt_count = 0
     self.pool = None
-
+    
     self.primary = (user, password, host, port)
     self._secure = secure
     self.setpool(self.primary)
-
+    
     self.postdata = {'method': 'getwork', 'id': 'json'}
     self.connection = None
-
+    
+    self._lastHashRate = 0
+    
     self.backup = []
     if backup:
       for pool in backup.split(','):
@@ -184,19 +186,23 @@ class BitcoinMiner():
     return self._isStopped
   
   def hashrate(self, rate):
-    self.log.info('%s khash/s' % rate)
+    self.log.info('{rate:>6} khash/s {diff:>6}'.format(rate=rate, diff=(rate-self._lastHashRate)))
+    self._lastHashRate = rate
 
   def failure(self, message):
-    print '\n%s' % message
+    self.log.error(message)
     self.exit()
 
   def diff1Found(self, hash_, target):
     if target < 0xFFFF0000L:
-      self.log.info('checking %s <= %s' % hash_, target)
+      self.log.info('checking %s <= %s' % (hash_, target))
 
   def blockFound(self, hash_, accepted):
-    self.log.info('%s, %s' % hash_, if_else(accepted, 'accepted', 'invalid or stale'))
-
+    if accepted:
+      self.log.info('%s, accepted' % hash_)
+    else:
+      self.log.info('%s, invalid or stale' % hash_)
+  
   def mine(self):
     self._run = True
     self._isStopped = False
@@ -221,7 +227,7 @@ class BitcoinMiner():
         sleep(1)
       except Exception:
         self.log.error("Unexpected error:")
-        traceback.print_exc()
+        #traceback.print_exc()
     
     # wait for all the threads to die
     miningThread.join()
@@ -287,7 +293,7 @@ class BitcoinMiner():
         self.log.warn('Still unable to reconnect to primary pool (attempt %s), failing over' % self.failback_attempt_count)
         self.failback_getwork_count = 0
         return
-      self.warn('Problems communicating with bitcoin RPC %s %s' % self.errors, self.tolerance)
+      self.warn('Problems communicating with bitcoin RPC %s %s' % (self.errors, self.tolerance))
       self.errors += 1
       if self.errors > self.tolerance+1:
         self.errors = 0
@@ -358,7 +364,7 @@ class BitcoinMiner():
           (connection, result) = self.request(connection, url, self.headers)
           self.longPollActive = False
           self.queueWork(result['result'])
-          self.log.info('long poll: new block %s%s' % result['result']['data'][56:64], result['result']['data'][48:56])
+          self.log.info('long poll: new block %s%s' % (result['result']['data'][56:64], result['result']['data'][48:56]))
           last_url = self.longPollURL
         except NotAuthorized:
           self.log.error('long poll: Wrong username or password')
@@ -366,7 +372,7 @@ class BitcoinMiner():
           self.log.error('long poll: %s', e)
         except (IOError, httplib.HTTPException, ValueError):
           self.log.error('long poll exception:')
-          traceback.print_exc()
+          #traceback.print_exc()
 
   def miningThread(self):
     self.loadKernel()
