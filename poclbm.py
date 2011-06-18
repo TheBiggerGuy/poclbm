@@ -15,24 +15,77 @@ from BitcoinMiner import *
 
 PROGRAM_VERSION = '0.0.1'
 
-class Cpu(object):
+class Device(object):
   
-  def __init__(self, name, number, sse=False, sse2=False):
-    self.name = name
-    self.number = number
-    self.sse  = sse
-    self.sse2 = sse2
+  TYPE_UNKNOWN  = 'Unknown'
+  TYPE_CPU_C    = 'CPU (c)'
+  TYPE_CPU_SSE2 = 'CPU (SSE2)'
+  TYPE_OPENCL   = 'OpenCL'
+  
+  def __init__(self, name, number, type_=TYPE_UNKNOWN):
+    self._name = name
+    self._number = number
+    self._type = type_
+  
+  def getName(self):
+    return self._name
+  
+  def getNumber(self):
+    return self._number
+  
+  def getType(self):
+    return self._type
   
   def __str__(self):
-    return "CPU '({number) {name}' Object".format(name=self.name, number=self.number)
+    return 'Device "({numnber} {name})" of type "{type_}"'.format(
+      name=self.name,
+      number=self.number,
+      type_=self._type
+    )
 
-class Cpus(object):
+class CpuDevice(Device):
+  
+  def __init__(self, name, number, cpuNumber, sse=False, sse2=False):
+    if sse2:
+      Device.__init__(self, name, number, Device.TYPE_CPU_SSE2)
+    else:
+      Device.__init__(self, name, number, Device.TYPE_CPU_C)
+    self._cpuNumber = cpuNumber
+    self.sse  = sse
+    self.sse2 = sse2
+
+class OpenCLDevice(Device):
+  
+  def __init__(self, name, number, openCl):
+    Device.__init__(self, name, number, Device.TYPE_OPENCL)
+    self._openCl = openCl
+
+class DeviceList(object):
   
   def __init__(self):
-    self._cpus = []
-    self._populate()
+    self._devices = []
+    self._populateOpenCl()
+    self._populateCpus()
+    
+  def __len__(self):
+    return len(self._devices)
+
+  def showAllDevices(self):
+    print '#  | Type       | Name'
+    print '---+------------+--' + '-'*30
+    for device in self._devices:
+      print '{num:<2} | {type_:<10} | {name}'.format(
+        num=device.getNumber(),
+        type_=device.getType(),
+        name=device.getName()
+      )
+    print '---+------------+--' + '-'*30
   
-  def _populate(self):
+  def _populateOpenCl(self):
+    for device in cl.get_platforms():
+      self._devices.append( OpenCLDevice(device.name, len(self._devices), device) )
+  
+  def _populateCpus(self):
     try:
       proc = open("/proc/cpuinfo", "r")
     except IOError as e:
@@ -43,8 +96,8 @@ class Cpus(object):
     sse2 = False
     for line in proc:
       if line == "\n":
-        cpu = Cpu(name, number, sse=sse, sse2=sse2)
-        self._cpus.append(cpu)
+        cpu = CpuDevice(name, len(self._devices), number, sse=sse, sse2=sse2)
+        self._devices.append(cpu)
         sse  = False
         sse2 = False
         continue
@@ -68,30 +121,6 @@ class Cpus(object):
             sse2 = True
         continue
   
-  def get_platforms(self):
-    return self._cpus
-
-class DeviceList(object):
-  
-  def __init__(self):
-    self._gpus = cl.get_platforms()
-    self._cpus = Cpus().get_platforms()
-  
-  def getNumber(self):
-    return len(self._gpus) + len(self._cpus)
-
-  def showAllDevices(self):
-    i = 0
-    gpus = cl.get_platforms()
-    for gpu in self._gpus:
-      print '[%d]\tOpenCL\t%s' % (i, gpu.name)
-      i+=1
-    for cpu in self._cpus:
-      if cpu.sse2:
-        print '[%d]\tSSE2\t%s' % (i, cpu.name)
-      else:
-        print '[%d]\tc\t\t%s' % (i, cpu.name)
-      i+=1
 
 if __name__ == '__main__':
   
@@ -159,11 +188,16 @@ if __name__ == '__main__':
     help='List all devices',
     dest='list'
   )
+  parser.add_argument(
+    '--verbose',
+    action='store_true',
+    help='Show alot of rubish',
+    dest='verbose'
+  )
   
   """
   parser.add_option('-r', '--rate',     dest='rate',     default=1,           help='hash rate display interval in seconds, default=1', type='float')
   parser.add_option('-f', '--frames',   dest='frames',   default=30,          help='will try to bring single kernel execution to 1/frames seconds, default=30, increase this for less desktop lag', type='int')
-  parser.add_option('-d', '--device',   dest='device',   default=-1,          help='use device by id', type='int')
   parser.add_option('-a', '--askrate',  dest='askrate',  default=5,           help='how many seconds between getwork requests, default 5, max 10', type='int')
   parser.add_option('-w', '--worksize', dest='worksize', default=-1,          help='work group size, default is maximum returned by opencl', type='int')
   parser.add_option('-v', '--vectors',  dest='vectors',  action='store_true', help='use vectors')
@@ -171,8 +205,6 @@ if __name__ == '__main__':
   parser.add_option('--backup',         dest='backup',   default=None,        help='use fallback pools: user:pass@host:port[,user:pass@host:port]')
   parser.add_option('--tolerance',      dest='tolerance',default=2,           help='use fallback pool only after N consecutive connection errors, default 2', type='int')
   parser.add_option('--failback',       dest='failback', default=2,           help='attempt to fail back to the primary pool every N getworks, default 2', type='int')
-  parser.add_option('--verbose',        dest='verbose',  action='store_true', help='verbose output, suitable for redirection to log file')
-  parser.add_option('--platform',       dest='platform', default=-1,          help='use platform by id', type='int')
   """
   
   args = parser.parse_args()
@@ -189,8 +221,8 @@ if __name__ == '__main__':
     sys.exit(0)
   
   # more than 1 device and non selected
-  if args.device < 0 or args.device >= devices.getNumber():
-    print 'Please select a real device (0 to %d)' % (devices.getNumber()-1)
+  if args.device < 0 or args.device >= len(devices):
+    print 'Please select a real device (0 to %d)' % (len(devices)-1)
     devices.showAllDevices()
     sys.exit(1)
   
