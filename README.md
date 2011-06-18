@@ -23,5 +23,5 @@ Usage
 	  --list                List all devices
 	  --verbose             Show alot of rubish
 	
-	See [github.com/TheBiggerGuy/poclbm](https://github.com/TheBiggerGuy/poclbm) for more
+	See [github.com/TheBiggerGuy/poclbm](https://github.com/TheBiggerGuy/poclbm/) for more
 
