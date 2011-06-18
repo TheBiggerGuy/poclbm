@@ -3,36 +3,25 @@ poclbm
 
 Usage
 -----
-Usage: poclbm.py [options]
+>usage: poclbm.py [-h] [--version] [--user [USER]] [--password [PASSWORD]]
+>                 [--host [HOST]] [--port [PORT]] [--secure]
+>                 [--device [DEVICES [DEVICES ...]]] [--list] [--verbose]
+>
+>A OpenCL client for BitCoin minning
+>
+>optional arguments:
+>  -h, --help            show this help message and exit
+>  --version             show program's version number and exit
+>  --user [USER]         User name
+>  --password [PASSWORD]
+>                        Password
+>  --host [HOST]         Address to the server
+>  --port [PORT]         Server port number
+>  --secure              Force https (SSL) connection
+>  --device [DEVICES [DEVICES ...]]
+>                        Device number, see --list for a list of devices
+>  --list                List all devices
+>  --verbose             Show alot of rubish
+>
+>See https://github.com/TheBiggerGuy/poclbm for more
 
-Options:
-  --version             show program's version number and exit
-  -h, --help            show this help message and exit
-  -u USER, --user=USER  user name
-  --pass=PASSWORD       password
-  -o HOST, --host=HOST  RPC host (without 'http://')
-  -p PORT, --port=PORT  RPC port
-  -r RATE, --rate=RATE  hash rate display interval in seconds, default=1
-  -f FRAMES, --frames=FRAMES
-                        will try to bring single kernel execution to 1/frames
-                        seconds, default=30, increase this for less desktop
-                        lag
-  -d DEVICE, --device=DEVICE
-                        use device by id, by default asks for device
-  -a ASKRATE, --askrate=ASKRATE
-                        how many seconds between getwork requests, default 5,
-                        max 10
-  -w WORKSIZE, --worksize=WORKSIZE
-                        work group size, default is maximum returned by opencl
-  -v, --vectors         use vectors
-  -s FRAMESLEEP, --sleep=FRAMESLEEP
-                        sleep per frame in seconds, default 0
-  --backup=BACKUP       use fallback pools:
-                        user:pass@host:port[,user:pass@host:port]
-  --tolerance=TOLERANCE
-                        use fallback pool only after N consecutive connection
-                        errors, default 2
-  --failback=FAILBACK   attempt to fail back to the primary pool every N
-                        getworks, default 2
-  --verbose             verbose output, suitable for redirection to log file
-  --platform=PLATFORM   use platform by id

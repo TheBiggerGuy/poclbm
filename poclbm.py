@@ -24,7 +24,7 @@ if __name__ == '__main__':
   
   parser = argparse.ArgumentParser(
     description='A OpenCL client for BitCoin minning',
-    epilog='See http://www.xyz.com/abs for more'
+    epilog='See https://github.com/TheBiggerGuy/poclbm for more'
   )
   
   parser.add_argument('--version',      action='version', version=PROGRAM_NAME)
