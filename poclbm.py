@@ -196,24 +196,6 @@ if __name__ == '__main__':
   
   sys.exit(0)
   ## TODO ##########################################################
-  
-  
-  # no openCL devices
-  if len(platforms) == 0:
-    print 'Sorry no openCL devices found'
-    sys.exit(1)
-  
-  
-  
-  # platform number too low or high
-  elif args.platform < -1 or args.platform >= len(platforms):
-    print 'Invalid platform number'
-    showPlatforms()
-    sys.exit(1)
-
-  # there is only 1 platform and user didn't specify -> default platform 0
-  if args.platform == -1:
-    args.platform = 0
 
   devices = platforms[args.platform].get_devices()
 
